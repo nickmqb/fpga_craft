@@ -1,0 +1,1 @@
+../../muon/mu --args terrain_viewer.args && gcc -g -I../data_gen -I../../muon_gfx/sdl_bindings/SDL2_linux/include -L../../muon_gfx/sdl_bindings/SDL2_linux/build/build/.libs -o terrain_viewer terrain_viewer.c -lm -lSDL2 -lGL -lGLU

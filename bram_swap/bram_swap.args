@@ -1,0 +1,12 @@
+../../muon/lib/core.mu
+../../muon/lib/basic.mu
+../../muon/lib/stdio.mu
+../../muon/lib/string.mu
+../../muon/lib/containers.mu
+../../muon/lib/memory.mu
+../../muon/lib/environment.mu
+../../muon/lib/random.mu
+../../muon/lib/range.mu
+command_line_args_parser.mu
+main.mu
+--output-file bram_swap.c

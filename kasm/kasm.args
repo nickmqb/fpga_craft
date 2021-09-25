@@ -1,0 +1,19 @@
+../../muon/lib/core.mu
+../../muon/lib/basic.mu
+../../muon/lib/stdio.mu
+../../muon/lib/string.mu
+../../muon/lib/containers.mu
+../../muon/lib/memory.mu
+../../muon/lib/environment.mu
+../../muon/lib/random.mu
+../../muon/lib/range.mu
+../../muon/lib/sort.mu
+../../muon_bindings/linux/linux.mu
+command_line_args_parser.mu
+args_parser.mu
+error_helper.mu
+parser.mu
+generator.mu
+util.mu
+main.mu
+--output-file kasm.c

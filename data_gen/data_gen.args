@@ -1,0 +1,20 @@
+../../muon/lib/core.mu
+../../muon/lib/basic.mu
+../../muon/lib/containers.mu
+../../muon/lib/memory.mu
+../../muon/lib/string.mu
+../../muon/lib/stdio.mu
+../../muon/lib/environment.mu
+../../muon/lib/random.mu
+../../muon/lib/sort.mu
+stb_image.mu
+image.mu
+data_generator.mu
+font.mu
+light.mu
+block_info.mu
+generated_block_info.mu
+main.mu
+utils.mu
+--include-file external_linux.h
+--output-file data_gen.c

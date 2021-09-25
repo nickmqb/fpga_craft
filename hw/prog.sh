@@ -1,0 +1,1 @@
+iceprog build/test.bin

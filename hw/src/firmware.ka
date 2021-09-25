@@ -1,0 +1,1785 @@
+// Copyright 2021 nickmqb
+// SPDX-License-Identifier: Apache-2.0
+
+// Memory map
+// 0x0000-0x0fff Palette
+// 0x1000-0x12ff Screen tile map
+// 0x1300-0x13ff String table
+// 0x1400-0x15ff Trig lookup
+// 0x1600-0x17ff Block info
+// 0x1800-0x18ff Visibility lookup
+// 0x1900-0x19ff Chunk metadata (struct { id u16; dim u16; last_modified: u16; tx: u8; tz: u8 } x32)
+// 0x1a00-0x1aff Inventory
+// 0x1b00-0x1bff Physics column list (struct { chunk_entry_ptr u16; offset u16; delay u16; max_delay u16 } x4); ?
+// 0x1c00-0x1cff Adjacency info
+// 0x1d00-0x1dff Portal lookup
+// 0x1e00-0x1fff Unused
+// 0x2000-0x2fff Modified chunk data
+// 0x3000-0x3fff Flash buffer zone
+// 0x4000-0x7fff Light data
+// 0x8000-0xffff Map data
+
+FOV_SCALE_X var := 3482
+FOV_SCALE_Y var := 1741 // Formula: FOV_SCALE_X * .5 * (pixel_height / pixel_width)
+VIEW_DIR_SCROLL := 21 // Range: [0, 32], use lower value if high FOV
+WALK_FEET_DELTA := -207 // Must also update: feet_delta
+FLY_FEET_DELTA := -80
+HAIR_DELTA := 23
+WATER_DELTA := -143
+PLAYER_HALF_SIZE := 38
+MAP_MASK_XZ := 31
+BUTTON_C_UP := 0x0800
+BUTTON_C_DOWN := 0x0400
+BUTTON_C_LEFT := 0x0200
+BUTTON_C_RIGHT := 0x0100
+BUTTON_DPAD_UP := 0x0008
+BUTTON_DPAD_DOWN := 0x0004
+BUTTON_DPAD_LEFT := 0x0002
+BUTTON_DPAD_RIGHT := 0x0001
+BUTTON_A := 0x0080
+BUTTON_B := 0x0040
+BUTTON_Z := 0x0020
+BUTTON_START := 0x0010
+BUTTON_R := 0x1000
+BUTTON_L := 0x2000
+TILE_BEGIN := 0x1000
+TILE_SELECT_BEGIN := 0x1282
+TILE_END := 0x1300
+SKY_COLOR_LOOKUP := 0x1300
+TRIG_OFFSET := 0x1400
+BLOCK_INFO_OFFSET := 0x1600
+VISIBILITY_LOOKUP := 0x1800
+CHUNK_META_BEGIN := 0x1900
+CHUNK_META_END := 0x1a00
+PHYSICS_COLUMNS_BEGIN := 0x1b00
+PHYSICS_COLUMNS_END := 0x1b20
+PORTAL_LOOKUP := 0x1d00
+CHUNK_DATA_BEGIN := 0x2000
+FLASH_BUFFER_BEGIN := 0x3000
+HOTBAR_OFFSET := 0x1a00
+INVENTORY_OFFSET := 0x1a12
+ADJ_INFO_OFFSET := 0x1c00
+FLASH_SECTOR_ERASE := 0x1
+FLASH_PAGE_PROGRAM := 0x2
+FLASH_READ := 0x3
+FLASH_SUSPEND := 0x4
+FLASH_READ_STATUS := 0x5
+FLASH_WRITE_ENABLE := 0x6
+FLASH_RESUME := 0x7
+GRAVITY_BIT := 0x0800
+DOOR_BIT := 0x1000
+
+// String table
+
+STE_GAME_MENU := 0x1318
+STE_INVENTORY := 0x1326
+STE_DEBUG_INFO := 0x1334
+STE_FPGA_CRAFT := 0x133f
+STE_NOCLIP := 0x134a
+STE_TIME := 0x1351
+STE_SAVE := 0x135b
+STE_RETURN_TO_GAME := 0x136c
+STE_ON := 0x137b
+STE_OFF := 0x1381
+STE_COORDS := 0x1388
+STE_FACING_DIR := 0x13a0
+STE_ITEM_SELECT_TOP := 0x13b8
+STE_ITEM_SELECT_BOTTOM := 0x13bd
+
+// Block info
+
+DOOR_BLOCK := 72
+COBBLESTONE_BLOCK := 74
+OBSIDIAN_BLOCK := 75
+ROCKET := 76
+
+temp var
+temp2 var
+tx var
+ty var
+tz var
+arg var
+to_x var
+to_y var
+to_z var
+i var
+player_x var := 0x0240 //9.7
+player_y var := 0x0bcf //9.7
+player_z var := 0x0240 //9.7
+scroll_x var := 0
+scroll_y var // Note: varies during frame (i.e. above/below horizon)
+scroll_z var := 0
+
+player_yaw var := -128 // rotate left = +
+player_pitch var := 128 // rotate down = +
+buttons var
+new_buttons var
+prev_buttons var
+repeat_button var
+repeat_delay var
+place_cooldown var
+mining_stage var // 12.4
+ray_hit var
+ray_cell_changed var
+ray_cell_x var
+ray_cell_y var
+ray_cell_z var
+ray_cell_adj_x var
+ray_cell_adj_y var
+ray_cell_adj_z var
+fwd_x var
+fwd_y var
+fwd_z var
+ray_x var
+ray_y var
+ray_z var
+right_x var
+right_z var
+up_x var
+up_y var
+up_z var
+output_y var
+f var
+target var
+move_x var // 4.12
+move_z var // 4.12
+dx var // 9.7
+dy var // 9.7
+dz var // 9.7
+avail var
+player_vel_y var
+xz_move_allowed var := 1
+y_move_allowed var := 1
+air_speed var := 0
+rocket_boost var := 0
+feet_delta var := -207
+flying var := 0
+player_yaw_acc var := 0
+hotbar_selected var := 0
+x_inv_selected var := 0
+y_inv_selected var := 0
+y_inv_scroll var := 0
+text_cursor var := 0
+dimension var := 1
+save_step var
+save_first_chunk var
+save_dim var
+save_chunk_index var
+save_last_modified var
+max_save_iterations var
+save_cached_chunks_target var
+gpu_line_flags var
+cached_chunks var
+last_modified var := 1
+flag_debug_info var := 1
+flag_stream_terrain var := 0
+time var := 4096
+flag_menu var := 0
+flag_noclip var := 0
+flag_debug_memory var := 0
+loaded_destroy_texture var
+lava_animation_cycle var := 0
+portal_animation_cycle var := 0
+menu_selected var := 0
+second_clone_done var
+cycles_remaining var
+cycles_remaining_gui var
+physics_columns_next var
+physics_current_water_entry var
+cache_entry_ptr var
+low_light_timer var
+door_timer var
+door_x var
+door_y var
+door_z var
+door_dir var
+door_dim var
+portal_remove var
+portal_dir var
+portal_i var
+player_block var
+px var
+py var
+pz var
+new_dimension var
+max_frame_time var
+last_frame_time var
+frame_time_delay var
+debug0 var
+debug1 var
+
+{
+	in:0x3f if z {
+		0x10cf =>player_y
+
+		// Lookups, light map, etc.
+		0x4000 out:0x20
+		32768 out:0x21
+		0 out:0x22
+		call dma_read_sync
+
+		// Textures
+		0x4200 out:0x20
+		32768 out:0x21
+		1 out:0x22
+		call dma_read_sync
+
+		// Map
+		call load_map
+		1 =>flag_stream_terrain
+	}
+
+	{
+		out:0x8 // Sync gamepad
+
+		0 =>move_x =>move_z
+		prev_buttons push
+		in:0x8 =>buttons =>prev_buttons
+		pop &~ =>new_buttons
+
+		// Button repeat
+		new_buttons if nz {
+			new_buttons 0x0f0f & if nz {
+				=>repeat_button
+				15 =>repeat_delay
+			}
+		}
+		buttons repeat_button & if nz { repeat_button == }
+		if nz {			
+			repeat_delay dec if z {
+				3 =>repeat_delay
+				new_buttons repeat_button | =>new_buttons
+			} else {
+				=>repeat_delay
+			}
+		} else {
+			=>repeat_button
+		}
+
+		// Handle input: menu/inventory activation
+		new_buttons BUTTON_START & if nz { flag_menu not =>flag_menu }
+		new_buttons BUTTON_L & if nz { flag_menu not <<:1 =>flag_menu }
+		flag_menu out:0x7 if z { =>menu_selected }
+
+		// Handle input: menu
+		flag_menu dec if z { 
+			new_buttons BUTTON_DPAD_UP & if nz { menu_selected dec =>menu_selected }
+			new_buttons BUTTON_DPAD_DOWN & if nz { menu_selected inc =>menu_selected }
+			menu_selected 0 call max_s 4 call min_s =>menu_selected
+
+			new_buttons BUTTON_A & if nz {
+				menu_selected if z {
+					flag_debug_info not =>flag_debug_info
+				} else {
+					dec if z {
+						flag_noclip not =>flag_noclip
+					} else {
+						dec if z {
+							time 4096 + 4095 &~ =>time
+						} else {
+							dec if z {
+								call begin_save
+							}
+							0 =>flag_menu
+						}
+					}
+				}
+			}
+			
+			// Debug buttons
+			//new_buttons BUTTON_C_UP & if nz { flag_debug_memory not =>flag_debug_memory }
+			//new_buttons BUTTON_C_DOWN & if nz { flag_stream_terrain not =>flag_stream_terrain }
+		} else {
+			// Handle buttons: hotbar
+			new_buttons BUTTON_DPAD_LEFT & if nz { hotbar_selected dec =>hotbar_selected }
+			new_buttons BUTTON_DPAD_RIGHT & if nz { hotbar_selected inc =>hotbar_selected }
+			hotbar_selected 9 call mod =>hotbar_selected
+		}
+		
+		// Handle input: inventory
+		flag_menu dec dec if z {
+			new_buttons BUTTON_C_LEFT & if nz { x_inv_selected dec =>x_inv_selected }
+			new_buttons BUTTON_C_RIGHT & if nz { x_inv_selected inc =>x_inv_selected }
+			x_inv_selected 9 call mod =>x_inv_selected
+			new_buttons BUTTON_C_UP & if nz { y_inv_selected dec =>y_inv_selected }
+			new_buttons BUTTON_C_DOWN & if nz { y_inv_selected inc =>y_inv_selected }
+			y_inv_selected 12 call mod =>y_inv_selected
+			y_inv_scroll dec 12 call mod y_inv_selected sub if z { y_inv_selected =>y_inv_scroll }
+			y_inv_scroll 3 + 12 call mod y_inv_selected sub if z { y_inv_scroll inc 12 call mod =>y_inv_scroll }
+			new_buttons BUTTON_A & if z { new_buttons BUTTON_R & }
+			if nz {
+				y_inv_selected 9 mul x_inv_selected + <<:1 INVENTORY_OFFSET + load push
+				hotbar_selected <<:1 HOTBAR_OFFSET + pop swap store
+			}
+			new_buttons BUTTON_B & if nz {
+				0 =>flag_menu
+			} else {
+				=>new_buttons =>buttons
+			}
+		}
+
+		// Handle input: movement + hotbar
+		flag_menu if z {
+			// Control scheme: "GoldenEye/Solitaire"
+			buttons BUTTON_C_UP & if nz { move_z 590 + =>move_z }
+			buttons BUTTON_C_DOWN & if nz { move_z 590 sub =>move_z }
+			buttons BUTTON_C_LEFT & if nz { move_x 590 sub =>move_x }
+			buttons BUTTON_C_RIGHT & if nz { move_x 590 + =>move_x }
+			in:0x9 0xff & call sign_extend_byte >>s:3 neg push player_yaw + 0x3ff & =>player_yaw
+			in:0x9 >>u:8 call sign_extend_byte >>s:3 player_pitch + -256 call max_s 256 call min_s =>player_pitch
+			pop player_yaw_acc + 3800 mul12s =>player_yaw_acc
+		}
+
+		// Lighting: default area
+		0 out:0x30
+		1023 out:0x31
+		0 out:0x34
+
+		// Suspend flash erase/program (sync)
+		FLASH_SUSPEND call dma_submit
+		{ call dma_read_busy_flag if nz goto begin }
+
+		// Determine visible region
+		flag_stream_terrain if nz {
+			player_pitch call abs_s 256 swap sub VIEW_DIR_SCROLL mul 4096 call min_s =>temp
+			low_light_timer if nz { temp 2048 mul12s =>temp }
+			player_yaw >>u:2 1 &~ VISIBILITY_LOOKUP + load
+			push 0xff & call sign_extend_byte temp mul12s =>dx
+			pop >>u:8 call sign_extend_byte temp mul12s =>dz
+			scroll_x 16 + <<:7 player_x swap sub >>s:8 dx sub =>dx
+			call abs_s =>temp
+			scroll_z 16 + <<:7 player_z swap sub >>s:8 dz sub =>dz
+			call abs_s temp
+
+			// Load chunks from flash or cache as needed
+			<=s if nz {
+				dx if nz {
+					dx 0 >s if nz {
+						scroll_x 2 + =>scroll_x 30 + =>tx
+					} else {
+						scroll_x 2 sub =>scroll_x =>tx
+					}
+					scroll_z =>tz 32 + =>to_z
+					{
+						call load_chunk
+						tz 2 + =>tz to_z sub if nz goto begin
+					}
+					scroll_z =>tz call combine_light_coords out:0x30
+					tx inc =>tx tz dec =>tz call combine_light_coords out:0x31
+					15 out:0x34
+				}
+			} else {
+				dz 0 >s if nz {
+					scroll_z 2 + =>scroll_z 30 + =>tz
+				} else {
+					scroll_z 2 sub =>scroll_z =>tz
+				}
+				scroll_x =>tx 32 + =>to_x
+				{
+					call load_chunk
+					tx 2 + =>tx to_x sub if nz goto begin
+				}
+				scroll_x =>tx call combine_light_coords out:0x30
+				tx dec =>tx tz inc =>tz call combine_light_coords out:0x31
+				15 out:0x34
+			}
+		}
+
+		flag_menu dec if nz {
+			call update
+
+			// Handle buttons: place block
+			buttons BUTTON_Z & if nz {
+				place_cooldown if z {
+					hotbar_selected <<:1 HOTBAR_OFFSET + load 255 & =>i
+					ROCKET sub if z {
+						call dec_hotbar_selected_qty
+						1 =>flying
+						23 =>rocket_boost
+						8 =>place_cooldown
+					} else {
+						ray_hit if nz {
+							ray_cell_adj_y 32 <u if nz {
+								ray_cell_x =>arg =>tx ray_cell_y =>ty ray_cell_z =>tz
+								call get_cell_address loadb 4 >=u if nz {
+									ray_cell_adj_x =>tx ray_cell_adj_y =>ty ray_cell_adj_z =>tz
+								}
+								flag_noclip if z { call no_block_player_intersect }
+								if nz {
+									call dec_hotbar_selected_qty
+									0 =>arg =>portal_remove							
+									i <<:1 BLOCK_INFO_OFFSET + load =>temp
+									temp 0x100 & if nz { player_yaw 128 + >>u:8 3 & =>arg }
+									temp 0x200 & if nz { arg 1 & =>arg player_pitch 128 + >>s:8 if nz { 2 =>arg } }
+									arg <<:1 i + push DOOR_BLOCK == push ty 31 <u pop & =>to_x
+									tx =>arg ty tz
+									call get_cell_address =>target
+									pop swap storeb
+									to_x if nz { swap 3 + DOOR_BLOCK inc swap storeb }
+									call commit_chunk
+									cache_entry_ptr push
+									call match_portal
+									pop =>cache_entry_ptr
+									target call trigger_physics
+									8 =>place_cooldown
+								}
+							}
+						}
+					}
+				}
+			}
+			buttons BUTTON_Z & if z { =>place_cooldown } // Reset cooldown immediately if button not pressed
+			place_cooldown dec 0 call max_s =>place_cooldown
+
+			// Handle buttons: mine block
+			buttons BUTTON_B & to_bool ray_hit & flying not & if nz {
+				ray_cell_changed if nz { 0 =>mining_stage }
+				ray_cell_x =>arg =>tx ray_cell_y ray_cell_z =>tz
+				call get_cell_address =>target loadb 8 >=u if nz {
+					mining_stage 10 + =>mining_stage 160 >=u if nz { 
+						=>portal_remove
+						call match_portal
+						0 target storeb
+						ray_cell_x =>tx ray_cell_z =>tz
+						call commit_chunk
+						target call trigger_physics
+					}
+					target
+				}
+			} else {
+				=>mining_stage
+			}
+			out:0x1b // Set mining block
+
+			// Handle buttons: jump
+			flag_noclip if z {
+				flying if z {
+					WATER_DELTA call is_in_water_or_lava if nz {
+						buttons BUTTON_R & if nz {
+							player_vel_y inc 12 call min_s
+						} else {
+							player_vel_y dec
+						}
+						=>player_vel_y
+						-5 <s if nz {
+							player_vel_y 3600 mul12s =>player_vel_y
+						}
+						player_vel_y 0 >s if nz {
+							player_vel_y WATER_DELTA + call is_in_water_or_lava if z {
+								xz_move_allowed if nz { 13 } else { 33 } =>player_vel_y // Avoid player_vel_y % gravity == 0
+							}
+						}
+					} else {
+						buttons BUTTON_R & if nz {
+							player_vel_y if z {
+								43 =>player_vel_y // Avoid player_vel_y % gravity == 0
+							}
+						}
+						player_vel_y 4 sub =>player_vel_y // Gravity
+					}
+				}
+				new_buttons BUTTON_A & to_bool ray_hit & if nz {
+					ray_cell_x =>arg ray_cell_y ray_cell_z
+					call get_cell_address =>i loadb =>arg <<:1 BLOCK_INFO_OFFSET + load DOOR_BIT & if nz {
+						arg 1 & if nz { ray_cell_y dec =>ray_cell_y }
+						ray_cell_y 31 <u if nz {
+							call close_door
+							dimension =>door_dim 
+							scroll_x =>arg ray_cell_x call to_world_coord =>door_x
+							scroll_z =>arg ray_cell_z call to_world_coord =>door_z
+							door_x =>arg ray_cell_y =>door_y door_z
+							call get_cell_address =>i
+							0 swap storeb 3 +
+							0 swap storeb
+							ADJ_INFO_OFFSET load i add_offset 4 add_offset loadb not inc =>door_dir
+							//push dec not if nz { 256 } player_yaw + 512 & not <<:2 pop | =>door_dir
+							45 =>door_timer
+						}
+					}
+				}
+			} else {
+				call stop_flying
+				0 =>player_vel_y
+				buttons BUTTON_R & if nz {
+					16 =>player_vel_y
+				}
+				buttons BUTTON_A & if nz {
+					-16 =>player_vel_y
+				}
+			}
+			player_vel_y =>dy
+		} else {
+			0 =>dy
+		}
+
+		// Animate texture: lava
+		lava_animation_cycle >>s:2 call abs_s <<:1 0x4340 + 0x7c00 call load_texture
+		lava_animation_cycle inc =>lava_animation_cycle 76 sub if z { -76 =>lava_animation_cycle }
+		
+		// Animate texture: portal
+		portal_animation_cycle <<:1 0x4380 + 0x7d00 call load_texture
+		portal_animation_cycle inc 31 & =>portal_animation_cycle
+
+		// Animate texture: destroy
+		mining_stage >>u:4 loaded_destroy_texture sub if nz {
+			swap =>loaded_destroy_texture <<:1 0x4300 + 0x7e00
+			call load_texture
+		}
+		
+		// Resume flash erase/program (async)
+		FLASH_RESUME call dma_submit
+
+		// Player speed modifiers
+		WATER_DELTA call is_in_water_or_lava if nz { move_x 2048 mul12s =>move_x move_z 2048 mul12s =>move_z }
+		flag_noclip if nz { move_x 10000 mul12s =>move_x move_z 10000 mul12s =>move_z }
+
+		// Player/view matrix
+		// fwd := yaw2 pitch1, pitch2, yaw1 pitch1
+		// right := yaw1, ---, yaw0
+		// up := yaw2 pitch0, pitch1, yaw1 pitch0
+		player_pitch 256 + call trig =>up_y
+		player_yaw call trig =>right_z
+		neg up_y mul12s =>fwd_x
+		player_yaw 256 + call trig =>right_x
+		up_y mul12s =>fwd_z
+		player_pitch call trig neg =>fwd_y
+
+		right_x move_x mul12s =>temp right_z neg move_z mul12s temp + >>s:5 =>dx
+		right_x move_z mul12s =>temp right_z move_x mul12s temp + >>s:5 =>dz
+
+		// Flying
+		flag_menu dec if nz {
+			flying if nz {
+				rocket_boost if nz {
+					dec =>rocket_boost
+					air_speed 2100 call max_s =>air_speed
+				}				
+				air_speed 768 >=u if nz {
+					FLY_FEET_DELTA =>feet_delta
+					4096 =>temp2
+					player_vel_y 4 + =>player_vel_y
+				} else {
+					player_y WALK_FEET_DELTA + >>u:7 call can_move_y if nz {
+						WALK_FEET_DELTA =>feet_delta
+					}
+					air_speed 512 sub 0 call max_s <<:4 =>temp2
+					4096 swap sub 4 mul12s player_vel_y swap sub =>player_vel_y
+				}
+				player_vel_y 0 call min_s =>player_vel_y
+				player_pitch call trig =>arg
+				70 mul12s temp2 mul12s air_speed + =>air_speed
+				player_pitch call abs_s 43 sub 0 call max_s 26 call min_s 4070 + push
+				air_speed pop mul12s =>air_speed
+				// Flare (B button or large yaw change)
+				buttons BUTTON_B & if z { player_yaw_acc call abs_s 144 >=u }
+				if nz { air_speed 3900 mul12s =>air_speed }
+				air_speed 0 call max_s 4000 call min_s =>air_speed
+				fwd_x air_speed mul12s >>s:5 =>dx =>move_x
+				fwd_y air_speed mul12s >>s:5 player_vel_y + =>dy
+				fwd_z air_speed mul12s >>s:5 =>dz =>move_z
+			}
+		}
+
+		// Update player
+		flag_noclip if z {
+			1 =>y_move_allowed =>xz_move_allowed
+			dy 0 >s if nz {
+				player_y HAIR_DELTA + =>player_y
+				@collision_pos_dy {
+					player_y ~ 0x7f & =>avail dy <u if nz {
+						player_y >>u:7 inc call can_move_y if nz {
+							dy avail sub dec =>dy
+							player_y avail + inc =>player_y
+							goto collision_pos_dy
+						} else {
+							=>y_move_allowed
+							avail =>dy
+							-1 =>player_vel_y
+						}
+					}
+				}
+				player_y dy + HAIR_DELTA sub =>player_y
+			}
+			dy 0 <s if nz {
+				player_y feet_delta + =>player_y			
+				player_y >>u:7 call can_move_y if nz {
+					dy neg =>dy
+					@collision_neg_dy {
+						player_y 0x7f & =>avail dy <u if nz {
+							player_y >>u:7 dec call can_move_y if nz {
+								dy avail sub dec =>dy
+								player_y avail sub dec =>player_y
+								goto collision_neg_dy
+							} else {
+								=>y_move_allowed =>player_vel_y
+								avail =>dy
+							}
+						}
+					}
+				} else {
+					=>dy =>y_move_allowed =>player_vel_y
+				}
+				player_y dy sub feet_delta sub =>player_y
+			}
+			dx 0 >s if nz {
+				player_x PLAYER_HALF_SIZE + ~ 0x7f & =>avail dx <u if nz {
+					player_x >>u:7 inc call can_move_x if z {
+						=>xz_move_allowed avail =>dx
+					}
+				}
+			}
+			dx 0 <s if nz {
+				dx neg push
+				player_x PLAYER_HALF_SIZE sub 0x7f & =>avail pop <u if nz {
+					player_x >>u:7 dec call can_move_x if z {
+						=>xz_move_allowed avail neg =>dx
+					}
+				}
+			}
+			player_x dx + =>player_x
+			dz 0 >s if nz {
+				player_z PLAYER_HALF_SIZE + ~ 0x7f & =>avail dz <u if nz {
+					player_z >>u:7 inc call can_move_z if z {
+						=>xz_move_allowed avail =>dz
+					}
+				}
+			}
+			dz 0 <s if nz {
+				dz neg push
+				player_z PLAYER_HALF_SIZE sub 0x7f & =>avail pop <u if nz {
+					player_z >>u:7 dec call can_move_z if z {
+						=>xz_move_allowed avail neg =>dz
+					}
+				}
+			}
+		} else {
+			player_y dy + =>player_y
+			player_x dx + =>player_x
+		}
+		player_z dz + =>player_z
+		player_y WALK_FEET_DELTA neg call max_s 0x1400 call min_s =>player_y
+
+		// Flying
+		flying if nz {
+			y_move_allowed if z {
+				player_vel_y if z {
+					call stop_flying
+				}
+			}
+		}
+
+		// Lighting + day/night cycle
+		scroll_x =>tx scroll_z =>tz call combine_light_coords out:0x32
+		tx dec =>tx tz dec =>tz call combine_light_coords out:0x33
+		time inc inc =>time
+		dimension dec out:0x36 if z {
+			time call get_skylight_inv out:0x35
+			dec <<:1 SKY_COLOR_LOOKUP + load
+		} else {
+			15 out:0x35
+			dimension 2 == if nz { 0 } // dimension specific sky_color
+		}
+		out:0x1d // Send sky_color to GPU
+		out:0x37
+
+		// Low light detection
+		dimension 1 sub if z {
+			call is_in_low_light if nz {
+				60 =>low_light_timer
+			} else {
+				// Only count down timer when moving/attempting to move to avoid repeated glitches
+				move_x to_bool move_z to_bool | if nz {
+					low_light_timer dec 0 call max_s =>low_light_timer
+				}
+			}
+		} else {
+			=>low_light_timer
+		}
+
+		// Portal detection
+		player_block =>to_x
+		0 =>new_dimension call get_player_block =>player_block 8 <u if nz {
+			swap 3 >=u if nz {
+				to_x 3 <u if nz {
+					dimension 1 sub if nz { 1 } else { player_block 3 == 2 + } =>new_dimension
+				}
+			}
+		}
+		
+		call compute_gpu_frame_flags out:0x1c
+
+		// View matrix
+		fwd_y right_z mul12s FOV_SCALE_Y mul12s =>up_x
+		fwd_y neg right_x mul12s FOV_SCALE_Y mul12s =>up_z
+		up_y FOV_SCALE_Y mul12s =>up_y fwd_y + =>fwd_y =>ray_y
+		right_x FOV_SCALE_X mul12s =>right_x
+		fwd_x right_x sub up_x + =>fwd_x =>ray_x
+		right_z FOV_SCALE_X mul12s =>right_z
+		fwd_z right_z sub up_z + =>fwd_z =>ray_z
+
+		// First map clone (for ray.y >= 0)
+		scroll_x =>arg player_y >>u:7 31 call min_s =>scroll_y scroll_z call get_cell_address
+		out:0x28 out:0x19 // Note: also send map_offset to GPU
+		out:0x2f
+		{ in:0x2f if nz goto begin } // Await map_cloner done
+		
+		// Run save coroutine for a bit.
+		// Note: must make sure that enough time has passed since the last resume erase/program instruction (20us as per datasheet),
+		// this is OK because of map cloner (above) which takes ~377us.
+		call save_coroutine
+
+		call render_door
+
+		// Set up GPU registers for next frame
+		scroll_x <<:7 player_x swap sub out:0x10
+		scroll_y <<:7 player_y swap sub out:0x11
+		scroll_z <<:7 player_z swap sub out:0x12
+		right_x out:0x13
+		right_z out:0x14
+
+		0 =>second_clone_done
+		0 =>output_y
+		0 =>f
+
+		0 =>cycles_remaining
+		{ cycles_remaining inc =>cycles_remaining in:0x0 3 sub if nz goto begin } // Await 4th text line start
+
+		frame_time_delay if nz {
+			dec =>frame_time_delay if z {
+				=>max_frame_time
+			}
+		}
+		in:0x1 push last_frame_time sub max_frame_time >s if nz {
+			swap =>max_frame_time
+			120 =>frame_time_delay
+		}
+		pop =>last_frame_time
+
+		call draw_gui // Can draw GUI without tearing as long as we don't use the 4th line
+
+		0 =>cycles_remaining_gui
+		{ cycles_remaining_gui inc =>cycles_remaining_gui in:0x0 4 sub if nz goto begin } // Await main frame buffer start
+
+		// Note: also serves as a slight delay to prevent gpu from catching up to vga module (first pixel)
+		call compute_gpu_line_flags 
+
+		{
+			ray_y 0 <s if nz {
+				second_clone_done if z {
+					scroll_x =>arg player_y >>u:7 23 sub 0 call max_s =>scroll_y scroll_z call get_cell_address
+					out:0x28 out:0x19 // Note: also send map_offset to GPU
+					out:0x2f
+					{ in:0x2f if nz goto begin } // Await map_cloner done
+					scroll_y <<:7 player_y swap sub out:0x11
+					1 =>second_clone_done
+				}
+			}
+
+			ray_x out:0x15
+			ray_y out:0x16
+			ray_z out:0x17
+			output_y out:0x18
+			gpu_line_flags out:0x1a
+			1 out:0x1f
+			
+			// While GPU is working, compute values for next line
+			f 64 + =>f
+			up_x mul12s fwd_x swap sub =>ray_x
+			f up_y mul12s fwd_y swap sub =>ray_y
+			f up_z mul12s fwd_z swap sub =>ray_z			
+			output_y inc =>output_y
+			call compute_gpu_line_flags
+
+			{ in:0x1f if nz goto begin } // Await GPU done
+
+			gpu_line_flags 1 & if nz {
+				in:0x17 20 <=u in:0x10 & =>ray_hit
+				0 =>ray_cell_changed
+				ray_cell_x push in:0x11 scroll_x + =>ray_cell_x pop != ray_cell_changed | =>ray_cell_changed
+				ray_cell_y push in:0x12 scroll_y + =>ray_cell_y pop != ray_cell_changed | =>ray_cell_changed
+				ray_cell_z push in:0x13 scroll_z + =>ray_cell_z pop != ray_cell_changed | =>ray_cell_changed
+				in:0x14 scroll_x + =>ray_cell_adj_x
+				in:0x15 scroll_y + =>ray_cell_adj_y
+				in:0x16 scroll_z + =>ray_cell_adj_z
+			}
+
+			output_y 128 sub if nz goto begin
+		}
+		
+		goto begin
+	}
+}
+
+@compute_gpu_line_flags {
+	output_y 64 == =>gpu_line_flags // is_center
+	62 output_y <=u push output_y 66 <=u pop & <<:1 gpu_line_flags | =>gpu_line_flags // crosshair
+	-3500 ray_y <s push ray_y 3500 <s pop & <<:2 gpu_line_flags | =>gpu_line_flags // texture y clamp
+	ret
+}
+
+@compute_gpu_frame_flags {
+	player_block
+	if z { ret }
+	1 != inc
+	ret
+}
+
+@sign_extend_byte {
+	128 >=u if z { swap ret }
+	swap
+	256 sub
+	ret
+}
+
+// x=arg, y=a, z=b
+@get_cell_address {
+	=>temp2
+	swap
+	31 & <<:2 =>temp
+	temp2 1 & <<:1 temp | =>temp
+	temp2 30 & <<:10 temp | =>temp
+	arg 1 & temp | =>temp
+	arg 30 & <<:6 temp | 32768 |
+	ret
+}
+
+// address=b
+@cell_address_to_world_coords {
+	=>temp2 >>u:2 31 & =>ty
+	temp2 >>u:6 30 & push temp2 1 & pop | =>tx
+	temp2 >>u:10 30 & push temp2 2 & to_bool pop | =>tz
+	call txtz_to_world_coords
+	ret
+}
+
+// tx, tz
+@txtz_to_world_coords {
+	scroll_x =>arg tx call to_world_coord =>tx
+	scroll_z =>arg tz call to_world_coord =>tz
+	ret
+}
+
+// x=arg, y=a, z=b
+@is_cell_empty {
+	=>temp swap 32 >=u if z {
+		swap temp call get_cell_address
+		loadb 8 <u
+	}
+	ret
+}
+
+@get_player_cell_xz_from { PLAYER_HALF_SIZE sub >>u:7 MAP_MASK_XZ & ret }
+@get_player_cell_xz_to { PLAYER_HALF_SIZE + >>u:7 MAP_MASK_XZ & ret }
+@get_player_cell_y_delta { player_y + >>u:7 ret }
+
+@can_move_x {
+	=>arg
+	player_z call get_player_cell_xz_from =>tz
+	player_z call get_player_cell_xz_to =>to_z
+	HAIR_DELTA call get_player_cell_y_delta =>to_y
+	{
+		feet_delta call get_player_cell_y_delta =>ty
+		{
+			tz call is_cell_empty if z { ret }
+			ty to_y sub if nz { swap inc =>ty goto outer_begin }
+		}
+		tz to_z sub if nz { swap inc MAP_MASK_XZ & =>tz goto outer_begin }
+	}
+	1 ret
+}
+
+@can_move_z {
+	=>tz
+	player_x call get_player_cell_xz_from =>arg
+	player_x call get_player_cell_xz_to =>to_x
+	HAIR_DELTA call get_player_cell_y_delta =>to_y
+	{
+		feet_delta call get_player_cell_y_delta =>ty
+		{
+			tz call is_cell_empty if z { ret }
+			ty to_y sub if nz { swap inc =>ty goto outer_begin }
+		}
+		arg to_x sub if nz { swap inc MAP_MASK_XZ & =>arg goto outer_begin }
+	}
+	1 ret
+}
+
+@can_move_y {
+	=>ty
+	0 >=s if z { ret }	
+	player_x call get_player_cell_xz_from =>arg
+	player_x call get_player_cell_xz_to =>to_x
+	player_z call get_player_cell_xz_to =>to_z
+	{
+		player_z call get_player_cell_xz_from =>tz
+		{
+			ty tz call is_cell_empty if z { ret }
+			tz to_z sub if nz { swap inc MAP_MASK_XZ & =>tz goto outer_begin }
+		}
+		arg to_x sub if nz { swap inc MAP_MASK_XZ & =>arg goto outer_begin }
+	}
+	1 ret
+}
+
+// tx, ty, tz
+@no_block_player_intersect {
+	tx MAP_MASK_XZ & =>temp
+	player_x call get_player_cell_xz_from temp != push player_x call get_player_cell_xz_to temp != pop & if nz { ret }
+	tz MAP_MASK_XZ & =>temp
+	player_z call get_player_cell_xz_from temp != push player_z call get_player_cell_xz_to temp != pop & if nz { ret }
+	feet_delta call get_player_cell_y_delta ty >s push HAIR_DELTA call get_player_cell_y_delta ty <s pop | ret
+}
+
+// y_offset=b
+@get_player_block {
+	=>temp
+	player_x >>u:7 =>arg =>tx player_z >>u:7 =>tz player_y temp + >>u:7 =>ty tz call get_cell_address loadb
+	ret
+}
+
+// y_offset=b
+@is_in_water_or_lava {
+	call get_player_block dec 2 <u
+	ret
+}
+
+// player_x, player_y, player_z
+@is_in_low_light {
+	player_x >>u:7 =>tx
+	player_y >>u:7 31 & =>ty
+	player_z >>u:7 =>tz
+	call combine_light_coords <<:4 =>temp
+	ty >>u:1 temp |
+	0x4000 |
+	loadb =>temp
+	ty 1 & if nz { temp >>u:4 =>temp }
+	temp 15 & =>debug1
+	10 <=u
+	ret
+}
+
+// flash_addr=a, dest_addr=b
+@load_texture {
+	out:0x23 swap
+	out:0x20
+	256 out:0x21
+	1 out:0x22
+	call dma_read_sync
+	ret
+}
+
+// tx, tz
+@combine_light_coords {
+	tz 31 & <<:5 push tx 31 & pop |
+	ret	
+}
+
+// time=b
+@get_skylight_inv {
+	push 32768 &~ >>u:3 512 call min_s 256 + =>temp
+	pop 32768 & if nz { temp 512 + =>temp }
+	temp call trig 4096 + >>u:4 92 mul12s inc
+	ret
+}
+
+// tx, tz
+@get_chunk_id {
+	// Chunk address in flash: { zxzx xxxz zzzz zxxx }
+	tx >>u:1 0x7 & =>temp
+	tz 0x7e & <<:2 temp | =>temp
+	tx 0xf0 & <<:5 temp | =>temp
+	tz 0x80 & <<:6 temp | =>temp
+	dimension dec if z {
+		tx 0x100 & <<:6 temp | =>temp
+		tz 0x100 & <<:7 
+	} else {
+		dec if z {
+			temp 0x0fff // dim2: 128x128
+		} else {
+			temp 0x3fff // dim3: 256x256
+		}
+		& =>temp
+		dimension <<:14
+	}
+	temp |
+	ret
+}
+
+// tx, tz
+@get_chunk_address {
+	tx =>arg 0 tz call get_cell_address 3 &~
+	ret
+}
+
+@find_chunk_by_id {
+	=>temp
+	CHUNK_META_BEGIN =>i
+	{
+		i load temp sub if z {
+			i 2 + load dimension sub if z {
+				i ret
+			}
+		}
+		i 8 + =>i CHUNK_META_END <u if nz goto begin
+	}	
+	ret
+}
+
+@find_free_chunk_entry {
+	CHUNK_META_BEGIN =>i
+	{
+		i 2 + load if z { i ret }
+		i 8 + =>i CHUNK_META_END <u if nz goto begin
+	}
+	ret
+}
+
+// tx, tz
+@commit_chunk {
+	call get_chunk_id =>temp2
+	call find_chunk_by_id if z { call find_free_chunk_entry if z { ret } push cached_chunks inc =>cached_chunks pop }
+	=>cache_entry_ptr temp2 swap store
+	dimension swap store
+	last_modified swap store
+	push tx 1 &~ pop storeb
+	push tz 1 &~ pop storeb
+	call get_chunk_address =>i
+	call increment_last_modified	
+	call get_chunk_data_ptr
+	call copy_chunk
+	call check_autosave
+	ret
+}
+
+// tx, tz
+@load_chunk {
+	call get_chunk_address out:0x23 =>temp2
+	call get_chunk_id out:0x20
+	call find_chunk_by_id if nz {		
+		CHUNK_META_BEGIN sub <<:4 CHUNK_DATA_BEGIN + =>i 
+		temp2
+		call copy_chunk
+		ret
+	}
+	128 out:0x21
+	dimension 1 == <<:1 out:0x22
+	call dma_read_sync
+	ret
+}
+
+@load_map {
+	player_x >>u:7 1 &~ 16 sub =>scroll_x
+	player_z >>u:7 1 &~ 16 sub =>scroll_z
+	=>tz 32 + =>to_z
+	{
+		scroll_x =>tx 32 + =>to_x
+		{
+			call load_chunk
+			tx 2 + =>tx to_x sub if nz goto begin
+		}
+		tz 2 + =>tz to_z sub if nz goto begin
+	}
+	ret
+}
+
+// cache_entry_ptr
+@get_chunk_data_ptr {
+	cache_entry_ptr CHUNK_META_BEGIN sub <<:4 CHUNK_DATA_BEGIN +
+	ret
+}
+
+// cache_entry_ptr
+@copy_cached_chunk_to_map {
+	call is_chunk_currently_unloaded if nz { ret }
+	call get_chunk_data_ptr =>i
+	cache_entry_ptr 4 + last_modified swap store
+	loadb =>tx swap inc loadb =>tz
+	call get_chunk_address
+	call copy_chunk
+	call increment_last_modified
+	ret	
+}
+
+// arg=scroll, b=coord
+@to_world_coord {
+	31 & =>temp arg 31 & temp >u <<:5 push arg 31 &~ temp | pop +
+	ret
+}
+
+// cache_entry_ptr
+@is_chunk_currently_unloaded {
+	cache_entry_ptr 2 + load dimension sub if nz { ret }
+	scroll_x =>arg cache_entry_ptr 6 + loadb call to_world_coord =>tx
+	scroll_z =>arg cache_entry_ptr 7 + loadb call to_world_coord =>tz
+	call get_chunk_id push cache_entry_ptr load pop sub
+	ret
+}
+
+@increment_last_modified {
+	last_modified inc =>last_modified 65535 sub if z {
+		2 =>last_modified
+		0 =>save_last_modified
+		i push
+		CHUNK_META_BEGIN =>i
+		{
+			i 2 + load if nz { i 4 + 1 swap store }
+			i 8 + =>i CHUNK_META_END <u if nz goto begin
+		}
+		pop =>i
+	}
+	ret
+}
+
+// cache_entry_ptr, b=cell_address
+@trigger_physics {
+	3 & =>temp swap
+	loadb to_bool if z { 4 } =>temp2
+	physics_columns_next <<:3 PHYSICS_COLUMNS_BEGIN + cache_entry_ptr swap store
+	temp swap store
+	temp2 swap store
+	4 swap store
+	//256 swap store 256 swap store	
+	physics_columns_next inc 3 & =>physics_columns_next
+	cache_entry_ptr CHUNK_META_BEGIN sub >>u:3 =>physics_current_water_entry
+	ret
+}
+
+@update {
+	// Falling sand
+	PHYSICS_COLUMNS_BEGIN =>i
+	{
+		i push load =>cache_entry_ptr if nz {
+			2 + load if nz { // if valid entry
+				i 4 + =>temp2 load dec 0 call max_s temp2 store swap if z { // if delay == 0
+					i 6 + push load >>u:1 pop store swap temp2 store // max_delay /= 2; delay = max_delay
+					i 2 + load push
+					call get_chunk_data_ptr pop + =>i
+					128 + =>temp
+					8 =>arg
+					0 =>tx
+					{
+						arg =>temp2
+						i loadb =>arg <<:1 BLOCK_INFO_OFFSET + load GRAVITY_BIT & if nz {
+							temp2 8 <u if nz {
+								i loadb push i 4 sub pop swap storeb 0 i storeb
+								8 =>arg =>tx
+							}
+						}
+						i 4 + =>i temp <u if nz goto begin
+					}
+					tx if nz {
+						call copy_cached_chunk_to_map
+					} else {
+						pop 0 swap push store // clear entry
+					}
+				}
+			}
+		}
+		pop 8 + =>i PHYSICS_COLUMNS_END sub if nz goto begin
+	}
+
+	// Flow water/lava
+	physics_current_water_entry <<:3 CHUNK_META_BEGIN + =>cache_entry_ptr 2 + load if nz {
+		call is_chunk_currently_unloaded if z {			
+			tx scroll_x sub if z goto water_physics_done 30 sub if z goto water_physics_done
+			tz scroll_z sub if z goto water_physics_done 30 sub if z goto water_physics_done
+			cache_entry_ptr 6 + loadb =>tx swap inc loadb =>tz
+			call get_chunk_address =>to_x
+			call get_chunk_data_ptr =>i
+			128 + =>temp
+			0 =>tz
+			{
+				to_x loadb =>to_y 3 <u if nz {
+					temp i sub 4 >=u 4 + =>ty
+					0 =>arg
+					to_y 2 == <<:2 =>tx
+					{
+						tx <<:1 ADJ_INFO_OFFSET + load to_x add_offset loadb 3 <u if nz { swap } arg | =>arg
+						tx inc =>tx ty sub if nz goto begin
+					}
+					to_y 2 sub if z {
+						arg 1 sub if z {
+							OBSIDIAN_BLOCK =>tz i storeb
+						}
+					} else {
+						arg 2 & if nz {
+							arg to_y | 1 & if nz { COBBLESTONE_BLOCK } else { 2 }
+							=>tz i storeb
+						} else {
+							to_y if z {
+								arg if nz {
+									1 =>tz i storeb
+								}
+							}
+						}
+					}
+				}
+				to_x inc =>to_x
+				i inc =>i temp <u if nz goto begin
+			}
+			tz if nz {
+				call copy_cached_chunk_to_map
+			}
+		}
+	}
+	@water_physics_done
+	physics_current_water_entry inc 31 & =>physics_current_water_entry
+
+	// Door
+	door_dim if nz {
+		door_timer dec 0 call max_s =>door_timer if z {
+			door_x =>tx door_y =>ty door_z =>tz 
+			call no_block_player_intersect if nz {
+				ty inc =>ty
+				call no_block_player_intersect if nz {
+					call close_door
+				}
+			}
+		}
+	}
+	
+	// Switch dimension
+	new_dimension if nz {
+		dimension 3 == push new_dimension =>dimension 3 == pop | if nz { 
+			0x40 =>player_x =>player_z 0x10cf=>player_y 0 =>player_pitch =>player_yaw
+			call load_map
+			ret
+		}
+
+		player_block 1 & =>portal_dir
+		0 =>player_pitch call get_player_block
+		dimension 1 sub if z {
+			tx <<:2 =>px
+			tz <<:2 =>pz
+		} else {
+			tx >>u:2 =>px
+			tz >>u:2 =>pz
+		}
+		px <<:7 =>player_x
+		pz <<:7 =>player_z
+		call load_map
+
+		// Find portal
+		pz 12 sub =>tz 24 + =>to_z
+		{
+			px 12 sub =>tx 24 + =>to_x
+			{
+				tx =>arg 0 tz call get_cell_address =>i =>arg 124 + =>temp
+				{
+					i loadb 1 &~ 4 sub if z {
+						i 4 + loadb =>temp2 1 &~ 4 sub if z {								
+							temp2 1 & =>temp2 portal_dir sub if nz { temp2 768 mul =>player_yaw }
+							tx =>px							
+							i arg sub >>u:2 =>py
+							tz =>pz
+							goto new_dimension_done
+						}
+					}
+					i 4 + =>i temp sub if nz goto begin
+				}
+				tx inc =>tx to_x sub if nz goto begin
+			}
+			tz inc =>tz to_z sub if nz goto begin
+		}
+
+		// Find y position for new portal
+		px =>arg 0 pz call get_cell_address =>arg 32 + =>i 76 + =>temp
+		{
+			i loadb 8 >=u if nz {
+				i 4 + loadb if z {
+					i 4 + =>i arg sub >>u:2 inc =>py
+					goto new_dimension_build_portal
+				}
+			}
+			i 4 + =>i temp sub if nz goto begin
+		}
+		16 =>py
+		arg 60 + =>i
+		
+		@new_dimension_build_portal
+		i =>temp
+		portal_dir <<:6 PORTAL_LOOKUP + =>arg
+		portal_dir 4 + =>to_x
+		
+		0 =>i
+		{
+			i 16 & if z {
+				i 10 <u if nz { OBSIDIAN_BLOCK } else { to_x }
+			} else {
+				i 28 >=u if nz { OBSIDIAN_BLOCK }
+			}
+			push
+			i <<:1 arg + load temp add_offset =>temp2 pop swap storeb
+			i 15 & 4 <u if nz { temp2 push }
+			i inc =>i 32 sub if nz goto begin
+		}
+		
+		0 =>portal_i
+		{
+			pop
+			call cell_address_to_world_coords call commit_chunk
+			portal_i inc =>portal_i 8 sub if nz goto begin
+		}
+
+		@new_dimension_done
+		px <<:7 0x40 | =>player_x
+		py <<:7 WALK_FEET_DELTA sub =>player_y
+		pz <<:7 0x40 | =>player_z
+	}
+
+	ret
+}
+
+@close_door {
+	dimension door_dim sub if z {
+		door_x =>tx door_z =>tz call get_chunk_id push
+		scroll_x =>arg tx call to_world_coord =>tx
+		scroll_z =>arg tz call to_world_coord =>tz
+		call get_chunk_id pop sub if z {			
+			door_x =>arg door_y door_z call get_cell_address
+			DOOR_BLOCK swap storeb 3 +
+			DOOR_BLOCK inc swap storeb
+		}
+	}		
+	0 =>door_dim
+	ret
+}
+
+@render_door {
+	dimension door_dim == if z { out:0x1e ret }
+	door_dir out:0x1e
+	3 & dec =>temp
+	door_dir 4 & if nz { -256 } else { 256 } =>temp2
+	DOOR_BLOCK out:0x0d
+	temp not temp2 mul8s door_x + =>tx
+	temp temp2 mul8s door_z + =>tz
+	tx =>arg door_y tz call get_cell_address out:0x0e
+	door_y inc tz call get_cell_address out:0x0f
+	ret
+}
+
+// portal_remove, target
+@match_portal {
+	0 =>portal_dir
+	{
+		0 =>portal_i
+		{
+			portal_remove =>ty
+			4 mul =>to_x
+			portal_dir <<:6 PORTAL_LOOKUP + =>to_z
+			portal_i <<:1 to_z + load ~ target add_offset 7 add_offset =>temp
+			0 =>tx =>arg
+			{				
+				tx 10 <u if nz { OBSIDIAN_BLOCK push 0 } else { to_x push ty } push
+				tx <<:1 to_z + load temp add_offset loadb pop &~ pop != arg | =>arg
+				tx inc =>tx 16 sub if nz goto begin
+			}
+			arg if z {
+				portal_dir 4 + portal_remove not mul =>to_x
+				10 =>tx
+				{
+					tx <<:1 to_z + load temp add_offset push to_x swap storeb
+					tx 12 <u if z { pop }
+					tx inc =>tx 16 sub if nz goto begin
+				}
+				pop call cell_address_to_world_coords call commit_chunk
+				pop call cell_address_to_world_coords call commit_chunk
+			}
+			portal_i inc =>portal_i 10 sub if nz goto begin
+		}
+		portal_dir inc =>portal_dir 2 sub if nz goto begin
+	}
+	ret
+}
+
+@dec_hotbar_selected_qty {
+	hotbar_selected <<:1 HOTBAR_OFFSET + inc push loadb dec if z { 64 } pop storeb
+	ret
+}
+
+@stop_flying {
+	0 =>flying =>rocket_boost =>air_speed
+	WALK_FEET_DELTA =>feet_delta
+	ret
+}
+
+@begin_save {
+	0 =>save_cached_chunks_target
+	48 =>max_save_iterations
+	save_step if nz { ret }
+	goto save_inc_step_ret
+}
+
+@check_autosave {
+	cached_chunks 24 <s if nz { ret }
+	save_step if nz { ret }
+	20 =>save_cached_chunks_target
+	8 =>max_save_iterations
+	goto save_inc_step_ret
+}
+
+@save_coroutine {
+	save_step if z { ret }
+
+	dec if z {
+		// 1. Find least recently used chunk
+		0xffff =>temp =>arg
+		CHUNK_META_BEGIN =>i
+		{
+			i 2 + load if nz {
+				i 4 + load =>temp2 temp <u if nz {
+					temp2 =>temp
+					i =>arg
+				}				
+			}
+			i 8 + =>i CHUNK_META_END <u if nz goto begin
+		}
+		0xffff arg sub if z { =>save_step ret }
+		arg load 31 &~ =>save_first_chunk
+		arg 2 + load =>save_dim
+		last_modified =>save_last_modified
+		goto save_inc_step_ret
+	}	
+
+	dec if z {
+		// 2. Load sector from flash into buffer zone (16 cycles/byte)
+		save_first_chunk out:0x20
+		4096 out:0x21
+		save_dim 1 == <<:1 out:0x22
+		FLASH_BUFFER_BEGIN out:0x23
+		call dma_read_sync
+		goto save_inc_step_ret
+	}
+
+	dec if z {
+		// 3. For each chunk in cache: if in target sector, memcpy to buffer zone (8.5 cycles/copied byte)
+		CHUNK_META_BEGIN =>tx
+		{
+			tx 2 + load save_dim sub if z {
+				tx load =>temp 31 &~ save_first_chunk sub if z {
+					tx CHUNK_META_BEGIN sub <<:4 CHUNK_DATA_BEGIN + =>i
+					temp 31 & <<:7 FLASH_BUFFER_BEGIN +
+					call copy_chunk
+				}				
+			}
+			tx 8 + =>tx CHUNK_META_END <u if nz goto begin
+		}
+		goto save_inc_step_ret
+	}
+
+	dec if z {
+		// 4. Erase sector from flash
+		call dma_write_enable
+		save_first_chunk out:0x20
+		save_dim 1 == <<:1 out:0x22
+		FLASH_SECTOR_ERASE call dma_submit
+		0 =>save_chunk_index
+		goto save_inc_step_ret
+	}
+
+	dec if z {
+		// 5. For each "page" (256 bytes) in sector (16 pages in total): page program flash
+		call dma_read_busy_flag if nz { ret } // If flash is still busy, wait until next frame
+
+		save_chunk_index 32 <u if z goto save_inc_step_ret
+
+		call dma_write_enable
+		save_first_chunk save_chunk_index + out:0x20
+		256 out:0x21
+		save_dim 1 == <<:1 out:0x22
+		save_chunk_index <<:7 FLASH_BUFFER_BEGIN + out:0x23
+		FLASH_PAGE_PROGRAM call dma_submit
+		save_chunk_index inc inc =>save_chunk_index
+		ret
+	}
+
+	// 6. For each chunk in cache: if in target sector && last_modified < save_last_modified: remove from cache
+	CHUNK_META_BEGIN =>tx
+	{
+		tx 2 + load save_dim sub if z {
+			tx =>temp load 31 &~ save_first_chunk sub if z {
+				tx 4 + load save_last_modified <u if nz {
+					0 temp store store store
+					cached_chunks dec =>cached_chunks
+				}
+			}				
+		}
+		tx 8 + =>tx CHUNK_META_END <u if nz goto begin
+	}
+
+	max_save_iterations dec =>max_save_iterations if z { =>save_step ret }
+	cached_chunks save_cached_chunks_target >s =>save_step
+	ret
+}
+
+@save_inc_step_ret {
+	save_step inc =>save_step
+	ret
+}
+
+@dma_submit {
+	out:0x27
+	{ in:0x27 if nz goto begin }
+	ret
+}
+
+@dma_read_sync {
+	FLASH_READ goto dma_submit
+}
+
+@dma_write_enable {
+	FLASH_WRITE_ENABLE goto dma_submit
+}
+
+@dma_read_busy_flag {
+	2 out:0x21
+	0 out:0x22
+	0x13fe out:0x23 // Use last 2 bytes of string table as temp memory location
+	FLASH_READ_STATUS call dma_submit
+	0x13fe loadb 1 &
+	ret
+}
+
+// i=src_from, b=dest (note: both must be even)
+@copy_chunk {
+	=>temp
+	i 128 + =>arg
+	{
+		i load temp store =>temp
+		i inc inc =>i
+		arg sub if nz goto begin
+	}
+	ret
+}
+
+@min_s {
+	=>temp
+	<s if nz { swap } else { temp }
+	ret
+}
+
+@max_s {
+	=>temp
+	>s if nz { swap } else { temp }
+	ret
+}
+
+@abs_s {
+	0 >=s if nz { swap } else { swap neg }
+	ret
+}
+
+@trig {
+	=>arg 0xff & =>i
+	arg 0x100 & if nz { 0x100 i sub 0xff call min_s =>i }
+	i <<:1 TRIG_OFFSET + load =>temp
+	arg 0x200 & if nz { temp neg =>temp }
+	temp
+	ret
+}
+
+@hex_digit {
+	10 <u if nz { swap 16 } else { swap 23 } +
+	ret
+}
+
+@write_char {
+	push TILE_BEGIN text_cursor + pop swap storeb
+	text_cursor inc =>text_cursor
+	ret
+}
+
+@write_byte_value {
+	=>temp
+	>>u:4 call hex_digit call write_char
+	temp 15 & call hex_digit call write_char
+	ret
+}
+
+@write_value {
+	=>arg
+	>>u:8 call write_byte_value
+	arg 255 & call write_byte_value
+	ret
+}
+
+@write_string {
+	=>i
+	text_cursor TILE_BEGIN + =>temp
+	i
+	{		
+		loadb if nz {
+			temp storeb =>temp
+			i inc =>i
+			goto outer_begin
+		}
+	}
+	temp TILE_BEGIN sub =>text_cursor
+	ret
+}
+
+@sleep_ms {	
+	if z { ret }
+	push	
+	8156 { dec if nz goto begin } // 4 cycles per iteration
+	pop
+	dec
+	goto begin
+}
+
+@sleep_us {	// Approx
+	if z { ret }
+	push	
+	8 { dec if nz goto begin } // 4 cycles per iteration
+	pop
+	dec
+	goto begin
+}
+
+// to=temp, from=b (must have: (to - from) % 16 == 0)
+@zero_memory {
+	0
+	{ swap store store store store store store store store temp >=u if z goto begin }
+	ret
+}
+
+// value=a, divisor=b (compute: value % divisor; limitation: only works if -divisor <= value < 256; temp2 == value / divisor)
+@mod {
+	=>arg
+	swap =>temp
+	0 =>temp2 <s if nz { temp arg + =>temp }
+	temp 255 & =>temp
+	{
+		arg >=u if nz {
+			temp2 inc =>temp2
+			temp arg sub =>temp
+			goto outer_begin
+		}
+	}
+	temp
+	ret
+}
+
+@to_decimal {
+	10 call mod temp2 <<:4 temp +
+	ret
+}
+
+@draw_item {
+	if nz {
+		push
+		0xff & <<:1 BLOCK_INFO_OFFSET + loadb 128 | =>temp
+		to_x =>text_cursor temp call write_char temp call write_char
+		30 + =>text_cursor
+		pop >>u:8
+		call to_decimal // Comment out this line to display item quantities as hex
+		call write_byte_value
+	}
+	ret
+}
+
+@draw_item_selection_rect {
+	33 sub push =>text_cursor STE_ITEM_SELECT_TOP call write_string
+	pop 96 + =>text_cursor STE_ITEM_SELECT_BOTTOM call write_string
+	ret
+}
+
+@draw_hotbar {
+	0 =>i
+	675 =>to_x
+	{
+		i <<:1 HOTBAR_OFFSET + load call draw_item
+		to_x 3 + =>to_x
+		i inc =>i 9 sub if nz goto begin
+	}
+	hotbar_selected 3 mul 675 + call draw_item_selection_rect
+	ret
+}
+
+DEBUG_ADDRESS := 0x1900
+
+@debug_memory {
+	DEBUG_ADDRESS =>i
+	0x280 =>text_cursor
+	{
+		i load call write_value
+		i inc inc =>i
+		text_cursor 0x300 sub if nz goto begin
+	}
+	ret
+}
+
+@draw_gui {	
+	TILE_END =>temp TILE_BEGIN call zero_memory
+	flag_debug_memory if nz {
+		call debug_memory
+	} else {
+		call draw_hotbar
+	}
+
+	// Save indicator(s)
+	save_step if nz { 
+		cached_chunks save_cached_chunks_target sub 3 + >>u:2 1 call max_s 32 swap sub =>text_cursor
+		{ 27 call write_char text_cursor 32 <s if nz goto begin }
+	}
+
+	flag_debug_info if nz {
+		0 =>text_cursor
+		STE_FPGA_CRAFT call write_string
+		32 =>text_cursor
+		STE_COORDS call write_string
+		34 =>text_cursor player_x call write_value
+		41 =>text_cursor player_y call write_value
+		48 =>text_cursor player_z call write_value
+		55 =>text_cursor player_yaw 64 + >>u:7 7 & 3 mul STE_FACING_DIR + call write_string
+
+		64 =>text_cursor
+		in:0x25 call write_value 0 call write_char
+		in:0x26 call write_value 0 call write_char
+		cached_chunks call write_value 0 call write_char
+		low_light_timer call write_value 0 call write_char
+		air_speed call write_value 0 call write_char
+		//max_frame_time call write_value 0 call write_char
+	}
+
+	flag_menu dec if z {
+		233 =>text_cursor
+		STE_GAME_MENU call write_string
+		menu_selected <<:5 294 + =>text_cursor 0x1e call write_char
+		296 =>text_cursor
+		STE_DEBUG_INFO call write_string
+		flag_debug_info if nz { STE_ON } else { STE_OFF } call write_string
+		328 =>text_cursor
+		STE_NOCLIP call write_string
+		flag_noclip if nz { STE_ON } else { STE_OFF } call write_string
+		360 =>text_cursor
+		STE_TIME call write_string
+		366 =>text_cursor time >>u:8 call write_byte_value
+		392 =>text_cursor
+		STE_SAVE call write_string
+		398 =>text_cursor cached_chunks call write_byte_value
+		424 =>text_cursor
+		STE_RETURN_TO_GAME call write_string
+	}
+
+	flag_menu dec dec if z {
+		201 =>text_cursor
+		STE_INVENTORY call write_string
+		y_inv_scroll 9 mul =>i
+		259 =>to_x
+		{
+			0 =>tx
+			{
+				i <<:1 INVENTORY_OFFSET + load call draw_item
+				i inc =>i
+				to_x 3 + =>to_x
+				tx inc =>tx 9 sub if nz goto begin
+			}
+			i 108 call mod =>i
+			to_x 69 + =>to_x 643 <u if nz goto begin
+		}		
+		y_inv_selected y_inv_scroll sub 12 call mod 96 mul push x_inv_selected 3 mul pop + 259 + call draw_item_selection_rect
+	}
+
+	ret
+}
