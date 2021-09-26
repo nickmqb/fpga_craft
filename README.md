@@ -104,7 +104,6 @@ As mentioned above, this repo does not include any textures (except for a few cu
 
 1. Go to dir `fpga_craft/hw`
 1. Optional. A "save loop" bug could cause rapid flash write cycle use (though I didn't encounter any bugs like that so far). By default, the code to save terrain changes to flash is commented out. To enable saving, overwrite `src/firmware.ka` with `src/firmware_save.ka`, i.e.: `cp src/firmware_save.ka src/firmware.ka`. When the game is saving, a progress bar (consisting out of floppy disk icons) is shown in the top right. Saving is done when all floppy disks have vanished. If the progress bar gets stuck and doesn't update at all for a long time (e.g. >10 seconds), the game may be stuck in a "save loop", you should disconnect power if that happens. Additionally: there are hardware counters that track the number of flash sector erase and page program operations, if you enable 'DEBUG INFO' in the game menu, these are shown on the 3rd line from the top (first 2 numbers). If these counters start going crazy, or if the game freezes, you should also disconnect power.
-1. Optional. If the pixels on your display have a non-square aspect ratio this may cause the 3D view to look slightly distorted. To fix, edit `src/firmware.ka` and tweak `FOV_SCALE_Y := ...` near the top of the file. Use the given formula.
 1. `./build.sh` (builds FPGA bitstream; pay close attention to the result, may fail timing; if that happens, just re-run the command until you get a result that meets timing; may need to run a few times).
 1. When the design meets timing: `./prog.sh` (upload bitstream to FPGA)
 
@@ -163,7 +162,7 @@ The other tools in this repo are written in [Muon](https://github.com/nickmqb/mu
 ### OpenGL terrain viewer: set up
 
 1. Go back to base directory (i.e. directory with `fpga_craft`, `muon`, etc.) 
-1. `git clone https://github.com/nickmqb/muon_gfx` and [follow the install instructions for sdl_bindings](https://github.com/nickmqb/muon_gfx/tree/master/sdl_bindings). Note: the `SDL2` directory should be a subdirectory of the `sdl_bindings` directory.
+1. `git clone https://github.com/nickmqb/muon_gfx` and [follow the setup instructions for sdl_bindings](https://github.com/nickmqb/muon_gfx/tree/master/sdl_bindings). Note: the `SDL2` directory should be a subdirectory of the `sdl_bindings` directory.
 1. `cd fpga_craft/terrain_viewer`
 1. `./build.sh`
 
