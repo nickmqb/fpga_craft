@@ -1,6 +1,6 @@
 # FPGA craft
 
-A voxel game for the iCE40 UP5K FPGA (for the iCEBreaker board).
+A voxel game/Minecraft clone for the iCE40 UP5K FPGA (for the iCEBreaker board).
 
 ## Disclaimer
 
