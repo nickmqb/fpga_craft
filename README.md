@@ -10,7 +10,7 @@ Use this project at your own risk. This project has had no real testing, and unl
 
 Note: this repo *does not* contain any assets/textures, you need to provide these yourself (more details below). 
 
-![Screenshot, made using the "Unity" texture pack (see below)](screenshot.png)
+![image](screenshot.png "Screenshot, made using the "Unity" texture pack (see below)")
 
 ## Features
 
@@ -23,6 +23,7 @@ Note: this repo *does not* contain any assets/textures, you need to provide thes
 * Max overworld size: 512x512x32 blocks (wraps at edges)
 * Offline terrain generator (run on PC, then upload terrain to flash) with multiple biomes/features (grass, forest, desert, snow, caves)
 * Low memory usage (15kb BRAM, 128kb SPRAM, 16MB flash)
+* Custom ray tracing GPU that handles ~1 million rays/second
 * Custom 16-bit CPU with its own instruction set, running at 32.625Mhz
 * Compiled firmware is ~5kb, written in custom Forth like assembly langage, compiled using custom assembler ("kasm")
 * Hardware design written in [Wyre, a custom hardware design language](https://github.com/nickmqb/wyre)
@@ -62,8 +63,10 @@ It should be possible to port the project to other boards/FPGAs, displays (e.g. 
 ### Getting the code
 
 1. `git clone https://github.com/nickmqb/fpga_craft` (this repo) 
-1. `git clone https://github.com/nickmqb/muon` and [follow the installation instructions](https://github.com/nickmqb/muon/blob/master/docs/getting_started.md)
-1. `git clone https://github.com/nickmqb/wyre` and [follow the installation instructions](https://github.com/nickmqb/wyre/blob/master/docs/getting_started.md)
+1. `git clone https://github.com/nickmqb/muon` and [follow the installation instructions](https://github.com/nickmqb/muon/blob/master/docs/getting_started.md).
+1. If not already done, move the Muon compiler binary `mu` to the `muon` directory (i.e. file path of the binary, including filename should be: `muon/mu`).
+1. `git clone https://github.com/nickmqb/wyre` and [follow the installation instructions](https://github.com/nickmqb/wyre/blob/master/docs/getting_started.md).
+1. If not already done, move the Wyre compiler binary `wyre` to the `wyre/compiler` directory (i.e. file path of the binary, including filename should be: `wyre/compiler/wyre`).
 
 ### Setting up textures
 
@@ -133,7 +136,6 @@ As mentioned above, this repo does not include any textures (except for a few cu
 
 ## Gameplay tips
 
-* If you get stuck in the terrain, hit Start on the controller, and select 'NOCLIP ON' (use DPAD to move cursor, A to select). Then just hold R on the controller to fly up, out of the terrain.
 * There is a day/night cycle. If it gets dark and you want to skip the night, hit Start, then select 'TIME' and hit A a bunch of times (TIME 0x10-0x80 = day, TIME 0x90-0x00 = night).
 * Terrain changes are buffered in memory. If you enabled saving (see instructions above), the game automatically saves changes to flash, as needed, to keep the buffer from getting too full. Before quitting, hit Start on the controller, then select 'SAVE XY CHUNKS' to save remaining changes to flash. A progress bar (consisting out of floppy disk icons) is shown in the top right; saving is done when all floppy disks have vanished.
 
@@ -148,7 +150,7 @@ As mentioned above, this repo does not include any textures (except for a few cu
 
 ### Changing the hardware design (.w)
 
-The HW design is written in [Wyre, a hardware design language](https://github.com/nickmqb/wyre).
+The HW design is written in [Wyre](https://github.com/nickmqb/wyre).
 
 *Important*: to avoid errors, set your tab size to 4 when editing .w files. (Wyre uses significant whitespace, but the feature still needs more work; this is the easiest workaround for now.)
 
@@ -161,7 +163,7 @@ The other tools in this repo are written in [Muon](https://github.com/nickmqb/mu
 ### OpenGL terrain viewer: set up
 
 1. Go back to base directory (i.e. directory with `fpga_craft`, `muon`, etc.) 
-1. `git clone https://github.com/nickmqb/muon_gfx` and [follow the install instructions for sdl_bindings](https://github.com/nickmqb/muon_gfx/tree/master/sdl_bindings).
+1. `git clone https://github.com/nickmqb/muon_gfx` and [follow the install instructions for sdl_bindings](https://github.com/nickmqb/muon_gfx/tree/master/sdl_bindings). Note: the `SDL2` directory should be a subdirectory of the `sdl_bindings` directory.
 1. `cd fpga_craft/terrain_viewer`
 1. `./build.sh`
 
