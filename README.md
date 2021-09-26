@@ -10,7 +10,7 @@ Use this project at your own risk. This project has had no real testing, and unl
 
 Note: this repo *does not* contain any assets/textures, you need to provide these yourself (more details below). 
 
-![image](screenshot.png "Screenshot, made using the "Unity" texture pack (see below)")
+![image](screenshot.png "Screenshot, made using the 'Unity' texture pack (see below)")
 
 ## Features
 
