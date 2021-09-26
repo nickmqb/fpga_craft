@@ -278,7 +278,7 @@ debug1 var
 							time 4096 + 4095 &~ =>time
 						} else {
 							dec if z {
-								call begin_save
+								//call begin_save
 							}
 							0 =>flag_menu
 						}
@@ -726,7 +726,7 @@ debug1 var
 		// Run save coroutine for a bit.
 		// Note: must make sure that enough time has passed since the last resume erase/program instruction (20us as per datasheet),
 		// this is OK because of map cloner (above) which takes ~377us.
-		call save_coroutine
+		//call save_coroutine
 
 		call render_door
 
@@ -1047,7 +1047,7 @@ debug1 var
 	call increment_last_modified	
 	call get_chunk_data_ptr
 	call copy_chunk
-	call check_autosave
+	//call check_autosave
 	ret
 }
 
@@ -1403,119 +1403,119 @@ debug1 var
 	ret
 }
 
-@begin_save {
-	0 =>save_cached_chunks_target
-	48 =>max_save_iterations
-	save_step if nz { ret }
-	goto save_inc_step_ret
-}
-
-@check_autosave {
-	cached_chunks 24 <s if nz { ret }
-	save_step if nz { ret }
-	20 =>save_cached_chunks_target
-	8 =>max_save_iterations
-	goto save_inc_step_ret
-}
-
-@save_coroutine {
-	save_step if z { ret }
-
-	dec if z {
-		// 1. Find least recently used chunk
-		0xffff =>temp =>arg
-		CHUNK_META_BEGIN =>i
-		{
-			i 2 + load if nz {
-				i 4 + load =>temp2 temp <u if nz {
-					temp2 =>temp
-					i =>arg
-				}				
-			}
-			i 8 + =>i CHUNK_META_END <u if nz goto begin
-		}
-		0xffff arg sub if z { =>save_step ret }
-		arg load 31 &~ =>save_first_chunk
-		arg 2 + load =>save_dim
-		last_modified =>save_last_modified
-		goto save_inc_step_ret
-	}	
-
-	dec if z {
-		// 2. Load sector from flash into buffer zone (16 cycles/byte)
-		save_first_chunk out:0x20
-		4096 out:0x21
-		save_dim 1 == <<:1 out:0x22
-		FLASH_BUFFER_BEGIN out:0x23
-		call dma_read_sync
-		goto save_inc_step_ret
-	}
-
-	dec if z {
-		// 3. For each chunk in cache: if in target sector, memcpy to buffer zone (8.5 cycles/copied byte)
-		CHUNK_META_BEGIN =>tx
-		{
-			tx 2 + load save_dim sub if z {
-				tx load =>temp 31 &~ save_first_chunk sub if z {
-					tx CHUNK_META_BEGIN sub <<:4 CHUNK_DATA_BEGIN + =>i
-					temp 31 & <<:7 FLASH_BUFFER_BEGIN +
-					call copy_chunk
-				}				
-			}
-			tx 8 + =>tx CHUNK_META_END <u if nz goto begin
-		}
-		goto save_inc_step_ret
-	}
-
-	dec if z {
-		// 4. Erase sector from flash
-		call dma_write_enable
-		save_first_chunk out:0x20
-		save_dim 1 == <<:1 out:0x22
-		FLASH_SECTOR_ERASE call dma_submit
-		0 =>save_chunk_index
-		goto save_inc_step_ret
-	}
-
-	dec if z {
-		// 5. For each "page" (256 bytes) in sector (16 pages in total): page program flash
-		call dma_read_busy_flag if nz { ret } // If flash is still busy, wait until next frame
-
-		save_chunk_index 32 <u if z goto save_inc_step_ret
-
-		call dma_write_enable
-		save_first_chunk save_chunk_index + out:0x20
-		256 out:0x21
-		save_dim 1 == <<:1 out:0x22
-		save_chunk_index <<:7 FLASH_BUFFER_BEGIN + out:0x23
-		FLASH_PAGE_PROGRAM call dma_submit
-		save_chunk_index inc inc =>save_chunk_index
-		ret
-	}
-
-	// 6. For each chunk in cache: if in target sector && last_modified < save_last_modified: remove from cache
-	CHUNK_META_BEGIN =>tx
-	{
-		tx 2 + load save_dim sub if z {
-			tx =>temp load 31 &~ save_first_chunk sub if z {
-				tx 4 + load save_last_modified <u if nz {
-					0 temp store store store
-					cached_chunks dec =>cached_chunks
-				}
-			}				
-		}
-		tx 8 + =>tx CHUNK_META_END <u if nz goto begin
-	}
-
-	max_save_iterations dec =>max_save_iterations if z { =>save_step ret }
-	cached_chunks save_cached_chunks_target >s =>save_step
-	ret
-}
-
-@save_inc_step_ret {
-	save_step inc =>save_step
-	ret
-}
+//@begin_save {
+//	0 =>save_cached_chunks_target
+//	48 =>max_save_iterations
+//	save_step if nz { ret }
+//	goto save_inc_step_ret
+//}
+//
+//@check_autosave {
+//	cached_chunks 24 <s if nz { ret }
+//	save_step if nz { ret }
+//	20 =>save_cached_chunks_target
+//	8 =>max_save_iterations
+//	goto save_inc_step_ret
+//}
+//
+//@save_coroutine {
+//	save_step if z { ret }
+//
+//	dec if z {
+//		// 1. Find least recently used chunk
+//		0xffff =>temp =>arg
+//		CHUNK_META_BEGIN =>i
+//		{
+//			i 2 + load if nz {
+//				i 4 + load =>temp2 temp <u if nz {
+//					temp2 =>temp
+//					i =>arg
+//				}				
+//			}
+//			i 8 + =>i CHUNK_META_END <u if nz goto begin
+//		}
+//		0xffff arg sub if z { =>save_step ret }
+//		arg load 31 &~ =>save_first_chunk
+//		arg 2 + load =>save_dim
+//		last_modified =>save_last_modified
+//		goto save_inc_step_ret
+//	}	
+//
+//	dec if z {
+//		// 2. Load sector from flash into buffer zone (16 cycles/byte)
+//		save_first_chunk out:0x20
+//		4096 out:0x21
+//		save_dim 1 == <<:1 out:0x22
+//		FLASH_BUFFER_BEGIN out:0x23
+//		call dma_read_sync
+//		goto save_inc_step_ret
+//	}
+//
+//	dec if z {
+//		// 3. For each chunk in cache: if in target sector, memcpy to buffer zone (8.5 cycles/copied byte)
+//		CHUNK_META_BEGIN =>tx
+//		{
+//			tx 2 + load save_dim sub if z {
+//				tx load =>temp 31 &~ save_first_chunk sub if z {
+//					tx CHUNK_META_BEGIN sub <<:4 CHUNK_DATA_BEGIN + =>i
+//					temp 31 & <<:7 FLASH_BUFFER_BEGIN +
+//					call copy_chunk
+//				}				
+//			}
+//			tx 8 + =>tx CHUNK_META_END <u if nz goto begin
+//		}
+//		goto save_inc_step_ret
+//	}
+//
+//	dec if z {
+//		// 4. Erase sector from flash
+//		call dma_write_enable
+//		save_first_chunk out:0x20
+//		save_dim 1 == <<:1 out:0x22
+//		FLASH_SECTOR_ERASE call dma_submit
+//		0 =>save_chunk_index
+//		goto save_inc_step_ret
+//	}
+//
+//	dec if z {
+//		// 5. For each "page" (256 bytes) in sector (16 pages in total): page program flash
+//		call dma_read_busy_flag if nz { ret } // If flash is still busy, wait until next frame
+//
+//		save_chunk_index 32 <u if z goto save_inc_step_ret
+//
+//		call dma_write_enable
+//		save_first_chunk save_chunk_index + out:0x20
+//		256 out:0x21
+//		save_dim 1 == <<:1 out:0x22
+//		save_chunk_index <<:7 FLASH_BUFFER_BEGIN + out:0x23
+//		FLASH_PAGE_PROGRAM call dma_submit
+//		save_chunk_index inc inc =>save_chunk_index
+//		ret
+//	}
+//
+//	// 6. For each chunk in cache: if in target sector && last_modified < save_last_modified: remove from cache
+//	CHUNK_META_BEGIN =>tx
+//	{
+//		tx 2 + load save_dim sub if z {
+//			tx =>temp load 31 &~ save_first_chunk sub if z {
+//				tx 4 + load save_last_modified <u if nz {
+//					0 temp store store store
+//					cached_chunks dec =>cached_chunks
+//				}
+//			}				
+//		}
+//		tx 8 + =>tx CHUNK_META_END <u if nz goto begin
+//	}
+//
+//	max_save_iterations dec =>max_save_iterations if z { =>save_step ret }
+//	cached_chunks save_cached_chunks_target >s =>save_step
+//	ret
+//}
+//
+//@save_inc_step_ret {
+//	save_step inc =>save_step
+//	ret
+//}
 
 @dma_submit {
 	out:0x27
@@ -1527,9 +1527,9 @@ debug1 var
 	FLASH_READ goto dma_submit
 }
 
-@dma_write_enable {
-	FLASH_WRITE_ENABLE goto dma_submit
-}
+//@dma_write_enable {
+//	FLASH_WRITE_ENABLE goto dma_submit
+//}
 
 @dma_read_busy_flag {
 	2 out:0x21
@@ -1755,9 +1755,9 @@ DEBUG_ADDRESS := 0x1900
 		360 =>text_cursor
 		STE_TIME call write_string
 		366 =>text_cursor time >>u:8 call write_byte_value
-		392 =>text_cursor
-		STE_SAVE call write_string
-		398 =>text_cursor cached_chunks call write_byte_value
+		//392 =>text_cursor
+		//STE_SAVE call write_string
+		//398 =>text_cursor cached_chunks call write_byte_value
 		424 =>text_cursor
 		STE_RETURN_TO_GAME call write_string
 	}
