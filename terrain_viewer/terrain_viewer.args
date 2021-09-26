@@ -8,7 +8,6 @@
 ../../muon/lib/random.mu
 ../../muon/lib/sort.mu
 ../../muon/lib/range.mu
-../../muon_bindings/linux/linux.mu
 ../../muon_gfx/sdl_bindings/sdl_linux.mu
 ../../muon_gfx/opengl_bindings/opengl_static_linux.mu
 ../../muon_gfx/opengl_bindings/opengl_core3.3_linux.mu

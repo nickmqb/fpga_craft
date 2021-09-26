@@ -8,7 +8,6 @@
 ../../muon/lib/random.mu
 ../../muon/lib/sort.mu
 ../../muon/lib/range.mu
-../../muon_bindings/linux/linux.mu
 ../data_gen/stb_image.mu
 ../data_gen/image.mu
 ../data_gen/utils.mu

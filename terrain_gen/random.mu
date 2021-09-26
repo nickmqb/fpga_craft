@@ -2,6 +2,7 @@
 // Copyright 2021 nickmqb
 // SPDX-License-Identifier: Apache-2.0
 
+exit(code int) void #Foreign("exit")
 time(t *uint) uint #Foreign("time")
 
 randomInt(rs *uint, from int, to int) {

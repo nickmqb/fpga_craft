@@ -2,6 +2,8 @@
 // Copyright 2021 nickmqb
 // SPDX-License-Identifier: Apache-2.0
 
+exit(code int) void #Foreign("exit")
+
 OpcodeInfo {
 	:mul = 0xdc
 	:mul16 = 0xdd
