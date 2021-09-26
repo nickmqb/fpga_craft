@@ -103,7 +103,10 @@ As mentioned above, this repo does not include any textures (except for a few cu
 ### Building the hardware design
 
 1. Go to dir `fpga_craft/hw`
-1. Optional. A "save loop" bug could cause rapid flash write cycle use (though I didn't encounter any bugs like that so far). By default, the code to save terrain changes to flash is commented out. To enable saving, overwrite `src/firmware.ka` with `src/firmware_save.ka`, i.e.: `cp src/firmware_save.ka src/firmware.ka`. When the game is saving, a progress bar (consisting out of floppy disk icons) is shown in the top right. Saving is done when all floppy disks have vanished. If the progress bar gets stuck and doesn't update at all for a long time (e.g. >10 seconds), the game may be stuck in a "save loop", you should disconnect power if that happens. Additionally: there are hardware counters that track the number of flash sector erase and page program operations, if you enable 'DEBUG INFO' in the game menu, these are shown on the 3rd line from the top (first 2 numbers). If these counters start going crazy, or if the game freezes, you should also disconnect power.
+1. By default, the code to save terrain changes to flash is commented out. You can choose to enable it.
+	* To enable saving, overwrite `src/firmware.ka` with `src/firmware_save.ka`, i.e.: `cp src/firmware_save.ka src/firmware.ka`. Terrain changes are buffered in memory. The game automatically saves changes to flash, as needed, to keep the buffer from getting too full. Before quitting, you must manually save any remaining changes (see gameplay tips below). When the game is saving, a progress bar (consisting out of floppy disk icons) is shown in the top right. Saving is done when all floppy disks have vanished.
+	* Keep an eye out for rapid flash usage bugs (though I didn't encounter any bugs like that so far). If the progress bar gets stuck and doesn't update at all for a long time (e.g. >10 seconds), the game may be stuck in a "save loop", you should disconnect power if that happens. Additionally: there are hardware counters that track the number of flash sector erase and page program operations, if you enable 'DEBUG INFO' in the game menu, these are shown on the 3rd line from the top (first 2 numbers). If these counters start going crazy, or if the game freezes, you should also disconnect power.	
+	* If you don't enable saving, the game buffers up to 32 changed terrain chunks (2x2) in memory. After that, subsequent placed blocks/changes will disappear as you move through the terrain. Note: if the game freezes, it's still a good idea to disconnect power; flash bugs are less likely if you don't enable saving but are still possible.
 1. `./build.sh` (builds FPGA bitstream; pay close attention to the result, may fail timing; if that happens, just re-run the command until you get a result that meets timing; may need to run a few times).
 1. When the design meets timing: `./prog.sh` (upload bitstream to FPGA)
 
@@ -136,7 +139,7 @@ As mentioned above, this repo does not include any textures (except for a few cu
 ## Gameplay tips
 
 * There is a day/night cycle. If it gets dark and you want to skip the night, hit Start, then select 'TIME' and hit A a bunch of times (TIME 0x10-0x80 = day, TIME 0x90-0x00 = night).
-* Terrain changes are buffered in memory. If you enabled saving (see instructions above), the game automatically saves changes to flash, as needed, to keep the buffer from getting too full. Before quitting, hit Start on the controller, then select 'SAVE XY CHUNKS' to save remaining changes to flash. A progress bar (consisting out of floppy disk icons) is shown in the top right; saving is done when all floppy disks have vanished.
+* If you enabled saving (see instructions above), before quitting, hit Start on the controller, then select 'SAVE XY CHUNKS' to save remaining changes to flash. A progress bar (consisting out of floppy disk icons) is shown in the top right; saving is done when all floppy disks have vanished.
 
 ## Optional steps
 
